@@ -2,6 +2,9 @@ import os
 import numpy as np
 import json
 from PIL import Image
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import matplotlib.image as mpimg
 
 def compute_convolution(I, T, stride=None):
     '''
@@ -11,59 +14,88 @@ def compute_convolution(I, T, stride=None):
     window_size, padding) to create additional functionality. 
     '''
 
-    normed = False
+    normed = True
     (n_rows,n_cols,n_channels) = np.shape(I)
     (k_rows,k_cols, k_channels) = np.shape(T)
 
-    heatmap = np.zeros(np.shape(I))
+    dimRGB = np.shape(I)
+    dimRGBlist = list(dimRGB)
+
+    dimLlist = dimRGBlist[:2]
+    heatmap = np.zeros(tuple(dimLlist))
 
     kc = (round(k_rows/2),round(k_cols/2))
-    heat = 0
-    norm = 0
+
+
     for row in range(n_rows - k_rows):
-        print('new row')
+        #print('new row')
         for col in range(n_cols - k_cols):
+            heat = 0
+            norm1 = 0
+            norm2 = 0
             for krow in range(k_rows):
                 for kcol in range(k_cols):
                     if normed:
-                        heat = heat + np.inner(I[row + krow][col + kcol],T[krow][kcol])
-                        norm = norm + np.inner(np.square(I[row + krow][col + kcol]),np.square(T[krow][kcol]))
+                        heat = heat + int(I[row + krow, col + kcol, 0]) * int(T[krow, kcol, 0])
+                        + int(I[row + krow, col + kcol, 1]) * int(T[krow, kcol, 1])
+                        + int(I[row + krow, col + kcol, 2]) * int(T[krow, kcol, 2])
+
+                        norm1 = norm1 + (int(I[row + krow, col + kcol, 0])**2) + (int(I[row + krow, col + kcol, 1])**2)
+                        + (int(I[row + krow, col + kcol, 2])**2)
+
+                        norm2 = norm2 + (int(T[krow, kcol, 0])**2) + (int(T[krow, kcol, 1])**2) + (int(T[krow, kcol, 2])**2)
+
                     else:
-                        heat = heat + np.inner(I[row + krow][col + kcol], T[krow][kcol])
+
+                        #IMPORTANT! cast the array entries to a larger datatype before multiplication to avoid overflow
+                        heat = heat + int(I[row + krow,col + kcol,0])*int(T[krow,kcol,0])
+                        + int(I[row + krow,col + kcol,1])*int(T[krow,kcol,1])
+                        + int(I[row + krow, col + kcol, 2]) * int(T[krow, kcol, 2])
                         #print(heat)
             if normed:
-                heatmap[row + kc[0]][col + kc[1]] = heat/norm
+                norm = np.sqrt(norm1*norm2)
+                if norm > 0:
+                    heatmap[row + kc[0],col + kc[1]] = heat/norm
+                else:
+                    heatmap[row + kc[0], col + kc[1]] = 0
             else:
-                heatmap[row + kc[0]][col + kc[1]] = heat
-            heat = 0
-            norm = 0
-
-    #print(heatmap)
+                #print(heat)
+                heatmap[row + kc[0],col + kc[1]] = heat
     return heatmap/np.max(heatmap)
 
+global idx
+global fh
 
-def predict_boxes(heatmap):
+def predict_boxes(heatmaps, kernals):
     '''
     This function takes heatmap and returns the bounding boxes and associated
     confidence scores.
     '''
 
+    '''
+    stoplight_area = 0.999
+    patches = np.zeros(np.shape(heatmap))
+
+    sorted = np.sort(heatmap,None)
+    cutoff_idx = int(stoplight_area*len(sorted))
+    cutoff = sorted[cutoff_idx]
+    print(cutoff)
+    (rows, cols) = np.shape(heatmap)
+
+    for row in range(rows):
+        for col in range(cols):
+            if heatmap[row,col]>=cutoff:
+                patches[row,col] = 1
+            else:
+                patches[row, col] = 0
+    patches_img64 = patches * 255
+    patches_img = patches_img64.astype(int)
+    img = Image.fromarray(patches_img)
+    img.show()
     output = []
-
-    '''
-    BEGIN YOUR CODE
-    '''
-    
-    '''
-    As an example, here's code that generates between 1 and 5 random boxes
-    of fixed size and returns the results in the proper format.
-    '''
-
     box_height = 8
     box_width = 6
-
     num_boxes = np.random.randint(1,5)
-
     for i in range(num_boxes):
         (n_rows,n_cols,n_channels) = np.shape(I)
 
@@ -71,16 +103,135 @@ def predict_boxes(heatmap):
         tl_col = np.random.randint(n_cols - box_width)
         br_row = tl_row + box_height
         br_col = tl_col + box_width
-
         score = np.random.random()
-
         output.append([tl_row,tl_col,br_row,br_col, score])
-
-    '''
-    END YOUR CODE
-    '''
-
     return output
+'''
+
+    out = []
+
+    for heatmap, kernal in zip(heatmaps, kernals):
+
+        fh = heatmap.flatten()
+        #print(fh[17000:17100])
+
+        idx = np.argsort(fh)
+        idx = np.flip(idx)
+        #print(idx[0:100])
+
+        sh = np.shape(heatmap)
+        rows = sh[0]
+        #print(rows)
+        cols = sh[1]
+        #print(cols)
+        locations = []
+
+        for i in range(100):
+            flat_index = idx[i]
+            #print("flat index is:", flat_index, "and i is ", i)
+            column = flat_index % cols
+            #print("column is:", column)
+            row = (flat_index - column)//cols
+            #print("flat_index - column: ", flat_index - column)
+            #print("rows times row: ", cols*row)
+            assert (flat_index - column) == cols*row
+            intensity = fh[flat_index]
+            rank = i
+            column = column - 1
+            row = row - 1
+            locations.append([row,column,intensity,rank])
+
+        '''
+        for item in locations:
+            heatmap[item[0],item[1]] = 0
+            
+        heatmap_img64 = heatmap * 255
+        heatmap_img = heatmap_img64.astype(int)
+        img = Image.fromarray(heatmap_img)
+        img.show()
+        '''
+
+        '''
+        valid is a list of hot pixels that are specially seperated from one another. 
+        This assumes any two stoplights are more than the seperation number of pixels apart
+        '''
+        seperation = 10
+        valid = []
+        valid.append(locations[0])
+        for pixel in locations:
+            if pixel == valid[0]:
+                continue
+            row = pixel[0]
+            col = pixel[1]
+            u_rank = 0
+            for npixel in valid:
+                nrow = npixel[0]
+                ncol = npixel[1]
+                distance = (abs(row-nrow))**2 + (abs(col - ncol))**2
+                if distance > seperation:
+                    u_rank = u_rank + 1
+                else:
+                    break
+                if u_rank >= len(valid):
+                    valid.append(pixel)
+
+        #for item in valid:
+        #    heatmap[item[0], item[1]] = 0
+
+        #heatmap_img64 = heatmap * 255
+        #heatmap_img = heatmap_img64.astype(int)
+        #img = Image.fromarray(heatmap_img)
+        #img.show()
+
+        kernal_dims = np.shape(kernal)
+        krows = kernal_dims[0]
+        kcols = kernal_dims[1]
+
+        krow_offsett = krows//2
+        kcol_offsett = kcols//2
+
+        for valid_pixel in valid:
+            tl_row = valid_pixel[0] - krow_offsett
+            tl_col = valid_pixel[1] - kcol_offsett
+            br_row = tl_row + krows
+            br_col = tl_col + kcols
+
+            out.append([tl_row,tl_col,br_row,br_col, valid[2]])
+
+    output = sorted(out, key = lambda x: x[4])
+
+
+    heatmap_img64 = heatmap * 255
+    heatmap_img = heatmap_img64.astype(int)
+    # img = Image.fromarray(heatmap_img)
+    # img.show()
+
+    fig, ax = plt.subplots(1)
+    ax.imshow(heatmap_img)
+
+    # Create a Rectangle patch
+    #rect = patches.Rectangle((50, 100), 20, 20, linewidth=1, edgecolor='r', facecolor='none')
+
+    # Add the patch to the Axes
+    #ax.add_patch(rect)
+
+
+
+    for i in range(3):
+        tl_row = output[i][0]
+        tl_col = output[i][1]
+        br_row = output[i][2]
+        br_col = output[i][3]
+        size_y = br_row - tl_row
+        size_x = br_col - tl_col
+        rect = patches.Rectangle((tl_col, tl_row), size_x, size_y, linewidth=1, edgecolor='r', facecolor='none')
+        ax.add_patch(rect)
+
+    plt.show()
+    plt.savefig()
+
+
+#output.append([tl_row,tl_col,br_row,br_col, score])
 
 
 def detect_red_light_mf(I):
@@ -99,20 +250,12 @@ def detect_red_light_mf(I):
     I[:,:,2] is the blue channel
     '''
 
-    '''
-    BEGIN YOUR CODE
-    '''
 
-    shrink_factor = 4
-    #template_height = 8
-    #template_width = 6
-
-
-    Kernals = [0]*7
-    npKernals = [0]*7
-    croppedKernals = [0]*7
-    Small_Kernals = [0]*7
-    for i in range(7):
+    Kernals = [0]*8
+    npKernals = [0]*8
+    croppedKernals = [0]*8
+    Small_Kernals = [0]*8
+    for i in range(8):
         Kernals[i] = (Image.open(os.path.join(kernal_path,'K' + str(i+1) + '.jpg')))
         npKernals[i] = np.asarray(Kernals[i])
 
@@ -127,7 +270,7 @@ def detect_red_light_mf(I):
         Small_Kernals[i] = croppedKernals[i].reshape((np.shape(croppedKernals[i])[0] // shrink_factor, bin_size,
                                                np.shape(croppedKernals[i])[1] // shrink_factor, bin_size, 3)).max(3).max(1)
 
-        print(np.shape(Small_Kernals[i]))
+        #print(np.shape(Small_Kernals[i]))
         #print(npKernals[i].shape)
 
 
@@ -140,21 +283,34 @@ def detect_red_light_mf(I):
                                                np.shape(Icropped)[1] // shrink_factor, bin_size, 3)).max(3).max(1)
 
     #print(np.shape(Ismall))
-    #img = Image.fromarray(Ismall, 'RGB')
-    #img.show()
+    img = Image.fromarray(Ismall, 'RGB')
+    img.show()
 
 
     # You may use multiple stages and combine the results
     #T = np.random.random((template_height, template_width))
 
-    heatmap = compute_convolution(Ismall, Small_Kernals[0])
-    print(heatmap)
-
-    #print(np.rint(heatmap * 256))
-    #img = Image.fromarray(np.rint(heatmap*256),'L')
+    #img = Image.fromarray(Small_Kernals[0], 'RGB')
     #img.show()
 
-    #output = predict_boxes(heatmap)
+    '''
+    ###########################################
+    '''
+
+    heatmap1 = compute_convolution(Ismall, Small_Kernals[1])
+    heatmap2 = compute_convolution(Ismall, Small_Kernals[2])
+    heatmap3 = compute_convolution(Ismall, Small_Kernals[3])
+    #Heatmap = np.stack((heatmap1, heatmap2, heatmap3), axis=-1)
+    #Heatmap.sort() #put most probable points for each heatmap at index 0 for the innermost array
+    #heatmap = Heatmap[:,:,0]    #slice that first index
+
+    heatmaps = [heatmap1, heatmap2, heatmap3]
+    kernals = Small_Kernals[1:4]
+
+
+    output = predict_boxes(heatmaps,kernals)
+
+
 
     '''
     END YOUR CODE
@@ -166,7 +322,7 @@ def detect_red_light_mf(I):
 
     return output
     '''
-
+shrink_factor = 4
 #global npKernals
 # Note that you are not allowed to use test data for training.
 # set the path to the downloaded data:
@@ -180,6 +336,8 @@ file_names_test = np.load(os.path.join(split_path,'file_names_test.npy'))
 
 # set a path for saving predictions:
 preds_path = '../data/hw02_preds'
+
+sub_path = '../submission'
 os.makedirs(preds_path, exist_ok=True) # create directory if needed
 
 # Set this parameter to True when you're done with algorithm development:
@@ -195,9 +353,10 @@ preds_train = {}
 len(file_names_train)
 
 '''
-for i in range(1):
+for i in range(15):
 
     # read image using PIL:
+    print(file_names_train[i])
     I = Image.open(os.path.join(data_path,file_names_train[i]))
 
     # convert to numpy array:

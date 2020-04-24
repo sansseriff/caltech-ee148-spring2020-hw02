@@ -69,7 +69,7 @@ gts_path = '../data/hw02_annotations'
 # load splits:
 split_path = '../data/hw02_splits'
 file_names_train = np.load(os.path.join(split_path,'file_names_train.npy'))
-file_names_test = np.load(os.path.join(split_Path,'file_names_test.npy'))
+file_names_test = np.load(os.path.join(split_path,'file_names_test.npy'))
 
 # Set this parameter to True when you're done with algorithm development:
 done_tweaking = False
@@ -77,10 +77,13 @@ done_tweaking = False
 '''
 Load training data. 
 '''
-with open(os.path.join(preds_path,'preds_train.json'),'r') as f:
-    preds_train = json.load(f)
+
+
+'''when I have predictions'''
+#with open(os.path.join(preds_path,'preds_train.json'),'r') as f:
+#    preds_train = json.load(f)
     
-with open(os.path.join(gts_path, 'annotations_train.json'),'r') as f:
+with open(os.path.join(gts_path, 'formatted_annotations_students.json'),'r') as f:
     gts_train = json.load(f)
 
 if done_tweaking:
@@ -100,14 +103,26 @@ if done_tweaking:
 # The code below gives an example on the training set for one IoU threshold. 
 
 
-confidence_thrs = np.sort(np.array([preds_train[fname][4] for fname in preds_train],dtype=float)) # using (ascending) list of confidence scores as thresholds
-tp_train = np.zeros(len(confidence_thrs))
-fp_train = np.zeros(len(confidence_thrs))
-fn_train = np.zeros(len(confidence_thrs))
-for i, conf_thr in enumerate(confidence_thrs):
-    tp_train[i], fp_train[i], fn_train[i] = compute_counts(preds_train, gts_train, iou_thr=0.5, conf_thr=conf_thr)
+# code here for visualizing train
 
-# Plot training set PR curves
+finish = False
 
-if done_tweaking:
-    print('Code for plotting test set PR curves.')
+for idx, item in gts_train:
+    print(idx)
+    print(item)
+
+
+if finish:
+    confidence_thrs = np.sort(np.array([preds_train[fname][4] for fname in preds_train],dtype=float)) # using (ascending) list of confidence scores as thresholds
+    tp_train = np.zeros(len(confidence_thrs))
+    fp_train = np.zeros(len(confidence_thrs))
+    fn_train = np.zeros(len(confidence_thrs))
+    for i, conf_thr in enumerate(confidence_thrs):
+        tp_train[i], fp_train[i], fn_train[i] = compute_counts(preds_train, gts_train, iou_thr=0.5, conf_thr=conf_thr)
+
+    # Plot training set PR curves
+
+    if done_tweaking:
+        print('Code for plotting test set PR curves.')
+
+
