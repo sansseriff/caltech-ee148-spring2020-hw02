@@ -17,6 +17,7 @@ def compute_convolution(I, T, stride=None):
     normed = True
     (n_rows,n_cols,n_channels) = np.shape(I)
     (k_rows,k_cols, k_channels) = np.shape(T)
+    print(np.shape(T))
 
     dimRGB = np.shape(I)
     dimRGBlist = list(dimRGB)
@@ -61,7 +62,12 @@ def compute_convolution(I, T, stride=None):
             else:
                 #print(heat)
                 heatmap[row + kc[0],col + kc[1]] = heat
+
+    #print("max of meatmap", np.max(heatmap))
+
     return heatmap/np.max(heatmap)
+    #return heatmap/np.sum(heatmap)
+    #return heatmap
 
 global idx
 global fh
@@ -72,43 +78,9 @@ def predict_boxes(heatmaps, kernals):
     confidence scores.
     '''
 
-    '''
-    stoplight_area = 0.999
-    patches = np.zeros(np.shape(heatmap))
-
-    sorted = np.sort(heatmap,None)
-    cutoff_idx = int(stoplight_area*len(sorted))
-    cutoff = sorted[cutoff_idx]
-    print(cutoff)
-    (rows, cols) = np.shape(heatmap)
-
-    for row in range(rows):
-        for col in range(cols):
-            if heatmap[row,col]>=cutoff:
-                patches[row,col] = 1
-            else:
-                patches[row, col] = 0
-    patches_img64 = patches * 255
-    patches_img = patches_img64.astype(int)
-    img = Image.fromarray(patches_img)
-    img.show()
-    output = []
-    box_height = 8
-    box_width = 6
-    num_boxes = np.random.randint(1,5)
-    for i in range(num_boxes):
-        (n_rows,n_cols,n_channels) = np.shape(I)
-
-        tl_row = np.random.randint(n_rows - box_height)
-        tl_col = np.random.randint(n_cols - box_width)
-        br_row = tl_row + box_height
-        br_col = tl_col + box_width
-        score = np.random.random()
-        output.append([tl_row,tl_col,br_row,br_col, score])
-    return output
-'''
 
     out = []
+    fullres = True
 
     for heatmap, kernal in zip(heatmaps, kernals):
 
@@ -142,16 +114,6 @@ def predict_boxes(heatmaps, kernals):
             locations.append([row,column,intensity,rank])
 
         '''
-        for item in locations:
-            heatmap[item[0],item[1]] = 0
-            
-        heatmap_img64 = heatmap * 255
-        heatmap_img = heatmap_img64.astype(int)
-        img = Image.fromarray(heatmap_img)
-        img.show()
-        '''
-
-        '''
         valid is a list of hot pixels that are specially seperated from one another. 
         This assumes any two stoplights are more than the seperation number of pixels apart
         '''
@@ -175,13 +137,7 @@ def predict_boxes(heatmaps, kernals):
                 if u_rank >= len(valid):
                     valid.append(pixel)
 
-        #for item in valid:
-        #    heatmap[item[0], item[1]] = 0
 
-        #heatmap_img64 = heatmap * 255
-        #heatmap_img = heatmap_img64.astype(int)
-        #img = Image.fromarray(heatmap_img)
-        #img.show()
 
         kernal_dims = np.shape(kernal)
         krows = kernal_dims[0]
@@ -195,40 +151,30 @@ def predict_boxes(heatmaps, kernals):
             tl_col = valid_pixel[1] - kcol_offsett
             br_row = tl_row + krows
             br_col = tl_col + kcols
+            if fullres:
+                out.append([tl_row*shrink_factor,tl_col*shrink_factor,br_row*shrink_factor,br_col*shrink_factor, valid_pixel[2]])
+            else:
+                out.append([tl_row, tl_col, br_row, br_col, valid_pixel[2]])
 
-            out.append([tl_row,tl_col,br_row,br_col, valid[2]])
+    output = sorted(out, key = lambda x: -x[4])
+    print("length of output:", len(output))
 
-    output = sorted(out, key = lambda x: x[4])
-
-
-    heatmap_img64 = heatmap * 255
-    heatmap_img = heatmap_img64.astype(int)
-    # img = Image.fromarray(heatmap_img)
-    # img.show()
-
-    fig, ax = plt.subplots(1)
-    ax.imshow(heatmap_img)
-
-    # Create a Rectangle patch
-    #rect = patches.Rectangle((50, 100), 20, 20, linewidth=1, edgecolor='r', facecolor='none')
-
-    # Add the patch to the Axes
-    #ax.add_patch(rect)
+    #json doesn't play well with numpy types
+    output = [[int(entry[0]) + 0, int(entry[1]) + 0,int(entry[2]) - 3,int(entry[3]) + 6, float(entry[4])] for entry in output]
 
 
+    max_conf = output[0][4]
+    sum_conf = 0
+    for item in output:
+        sum_conf = sum_conf + item[4]
 
-    for i in range(3):
-        tl_row = output[i][0]
-        tl_col = output[i][1]
-        br_row = output[i][2]
-        br_col = output[i][3]
-        size_y = br_row - tl_row
-        size_x = br_col - tl_col
-        rect = patches.Rectangle((tl_col, tl_row), size_x, size_y, linewidth=1, edgecolor='r', facecolor='none')
-        ax.add_patch(rect)
+    #for item in output:
+    #    item[4] = item[4]/max_conf
 
-    plt.show()
-    plt.savefig()
+    for item in output:
+        item[4] = item[4]/sum_conf
+
+    return output
 
 
 #output.append([tl_row,tl_col,br_row,br_col, score])
@@ -270,8 +216,6 @@ def detect_red_light_mf(I):
         Small_Kernals[i] = croppedKernals[i].reshape((np.shape(croppedKernals[i])[0] // shrink_factor, bin_size,
                                                np.shape(croppedKernals[i])[1] // shrink_factor, bin_size, 3)).max(3).max(1)
 
-        #print(np.shape(Small_Kernals[i]))
-        #print(npKernals[i].shape)
 
 
     I_cropped_row = (np.shape(I)[0] // shrink_factor) * shrink_factor
@@ -282,20 +226,8 @@ def detect_red_light_mf(I):
     Ismall = Icropped.reshape((np.shape(Icropped)[0] // shrink_factor, bin_size,
                                                np.shape(Icropped)[1] // shrink_factor, bin_size, 3)).max(3).max(1)
 
-    #print(np.shape(Ismall))
-    img = Image.fromarray(Ismall, 'RGB')
-    img.show()
 
 
-    # You may use multiple stages and combine the results
-    #T = np.random.random((template_height, template_width))
-
-    #img = Image.fromarray(Small_Kernals[0], 'RGB')
-    #img.show()
-
-    '''
-    ###########################################
-    '''
 
     heatmap1 = compute_convolution(Ismall, Small_Kernals[1])
     heatmap2 = compute_convolution(Ismall, Small_Kernals[2])
@@ -312,16 +244,13 @@ def detect_red_light_mf(I):
 
 
 
-    '''
-    END YOUR CODE
-    '''
-    '''
     for i in range(len(output)):
         assert len(output[i]) == 5
         assert (output[i][4] >= 0.0) and (output[i][4] <= 1.0)
 
     return output
-    '''
+
+
 shrink_factor = 4
 #global npKernals
 # Note that you are not allowed to use test data for training.
@@ -341,7 +270,7 @@ sub_path = '../submission'
 os.makedirs(preds_path, exist_ok=True) # create directory if needed
 
 # Set this parameter to True when you're done with algorithm development:
-done_tweaking = False
+done_tweaking = True
 
 '''
 Make predictions on the training set.
@@ -349,12 +278,8 @@ Make predictions on the training set.
 preds_train = {}
 
 
-'''limit images used here ######################################################################
-len(file_names_train)
-
-'''
-for i in range(15):
-
+for i in range(len(file_names_train)):
+    print(i)
     # read image using PIL:
     print(file_names_train[i])
     I = Image.open(os.path.join(data_path,file_names_train[i]))
@@ -362,13 +287,14 @@ for i in range(15):
     # convert to numpy array:
     I = np.asarray(I)
 
+
     preds_train[file_names_train[i]] = detect_red_light_mf(I)
 
 # save preds (overwrites any previous predictions!)
 with open(os.path.join(preds_path,'preds_train.json'),'w') as f:
     json.dump(preds_train,f)
 
-################################################################################################
+
 
 if done_tweaking:
     '''
